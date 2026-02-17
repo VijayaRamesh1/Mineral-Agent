@@ -1,0 +1,156 @@
+# Critical Minerals Signal Hunter — v1.0 Watchlist
+# 15 tickers covering rare earth, uranium, lithium, battery metals, and ETF proxies
+# Last updated: 2026-02-17
+
+tickers:
+  # --- Rare Earth Elements ---
+  - ticker: MP
+    company: MP Materials
+    sector: rare_earth
+    exchange: NYSE
+    rationale: Only US rare earth miner. NdPr proxy. Heavy EDGAR coverage.
+    edgar_cik: "0001801170"
+    cross_listed: false
+
+  - ticker: UUUU
+    company: Energy Fuels Inc
+    sector: uranium_ree
+    exchange: NYSE_AMERICAN
+    rationale: Uranium + REE recovery. Dual commodity angle.
+    edgar_cik: "0000797468"
+    cross_listed: true  # also TSX: EFR
+
+  - ticker: NB
+    company: NioCorp Developments
+    sector: rare_earth_niobium
+    exchange: NASDAQ
+    rationale: Scandium + niobium strategic minerals project.
+    edgar_cik: "0001574085"
+    cross_listed: true  # also TSX: NB
+
+  - ticker: LYSCF
+    company: Lynas Rare Earths
+    sector: rare_earth
+    exchange: OTC
+    rationale: Largest ex-China REE producer. US OTC listing.
+    edgar_cik: null
+    cross_listed: true  # primary: ASX: LYC
+
+  - ticker: REEMF
+    company: Rare Element Resources
+    sector: rare_earth
+    exchange: OTC
+    rationale: Bear Lodge rare earth project in Wyoming.
+    edgar_cik: null
+    cross_listed: true  # also TSX: RES
+
+  # --- Lithium ---
+  - ticker: PLL
+    company: Piedmont Lithium
+    sector: lithium
+    exchange: NASDAQ
+    rationale: Lithium for EV supply chain. US domestic project.
+    edgar_cik: "0001816159"
+    cross_listed: true  # also ASX: PLL
+
+  - ticker: PMETF
+    company: Patriot Battery Metals
+    sector: lithium
+    exchange: OTC
+    rationale: High-grade lithium pegmatite project. Cross-listed.
+    edgar_cik: null
+    cross_listed: true  # primary: TSX-V: PMET / CSE: PMET
+
+  # --- Strategic Minerals ---
+  - ticker: UAMY
+    company: United States Antimony
+    sector: antimony
+    exchange: NYSE_AMERICAN
+    rationale: Antimony — critical strategic mineral for defense applications.
+    edgar_cik: "0000101538"
+    cross_listed: false
+
+  - ticker: NOVRF
+    company: Nouveau Monde Graphite
+    sector: graphite
+    exchange: OTC
+    rationale: Graphite for EV battery anodes. Quebec-based project.
+    edgar_cik: null
+    cross_listed: true  # also NYSE: NMG, TSX-V: NOU
+
+  - ticker: GIGA
+    company: Gigametals Corp
+    sector: nickel_cobalt
+    exchange: OTC
+    rationale: Nickel/cobalt battery metals project in British Columbia.
+    edgar_cik: null
+    cross_listed: true  # also TSX-V: GIGA
+
+  # --- Uranium ---
+  - ticker: URG
+    company: Ur-Energy
+    sector: uranium
+    exchange: NYSE_AMERICAN
+    rationale: US uranium mining. Strategic minerals angle. Lost Creek ISR.
+    edgar_cik: "0001375365"
+    cross_listed: true  # also TSX: URE
+
+  - ticker: DNN
+    company: Denison Mines
+    sector: uranium
+    exchange: NYSE_AMERICAN
+    rationale: Canadian uranium. Wheeler River project. In-situ recovery focus.
+    edgar_cik: "0001221029"
+    cross_listed: true  # also TSX: DML
+
+  # --- ETF Proxies (market context) ---
+  - ticker: REMX
+    company: VanEck Rare Earth/Strategic Metals ETF
+    sector: etf_rare_earth
+    exchange: NYSE_ARCA
+    rationale: Basket proxy for rare earth sector. Market context signal.
+    edgar_cik: null
+    cross_listed: false
+    is_etf: true
+
+  - ticker: LIT
+    company: Global X Lithium & Battery Tech ETF
+    sector: etf_lithium
+    exchange: NYSE_ARCA
+    rationale: Lithium sector context. Basket proxy for battery supply chain.
+    edgar_cik: null
+    cross_listed: false
+    is_etf: true
+
+  - ticker: COPX
+    company: Global X Copper Miners ETF
+    sector: etf_copper
+    exchange: NYSE_ARCA
+    rationale: Copper supply chain context. Critical for EV and grid infrastructure.
+    edgar_cik: null
+    cross_listed: false
+    is_etf: true
+
+# Scoring weights (used by Signal Synthesis agent)
+scoring_weights:
+  filing: 30       # EDGAR filing signals (resource estimates, permits, JV)
+  news: 25         # News sentiment and volume
+  price: 25        # Price momentum vs REMX/LIT proxy
+  geo: 15          # Geopolitical risk score
+  novelty: 5       # New information vs prior signals
+
+# Signal direction thresholds
+thresholds:
+  bull: 60         # score >= 60 → BULL
+  bear: 40         # score < 40 → BEAR
+  # 40 <= score < 60 → WATCH
+
+# Pipeline configuration
+pipeline:
+  edgar_rate_limit_rps: 10
+  price_lookback_days: 30
+  news_lookback_hours: 48
+  max_filings_per_ticker: 5
+  claude_model: claude-sonnet-4-6
+  claude_temperature: 0
+  claude_max_tokens: 1024

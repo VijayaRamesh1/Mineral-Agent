@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: critical-minerals-agent
+    env_file:
+      - .env
+    volumes:
+      # Persist SQLite database outside container
+      - ./data:/app/data
+      # Mount source for local dev (hot reload)
+      - ./src:/app/src
+      - ./templates:/app/templates
+      - ./watchlist.yaml:/app/watchlist.yaml
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    command: >
+      uvicorn src.api:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+
+  # One-shot pipeline runner (manual trigger)
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: critical-minerals-pipeline
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./src:/app/src
+      - ./watchlist.yaml:/app/watchlist.yaml
+    profiles:
+      - run
+    command: python run_pipeline.py

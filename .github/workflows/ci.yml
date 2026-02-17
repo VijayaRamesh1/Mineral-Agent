@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    # Daily failsafe at 07:00 UTC (backup if local cron misses)
+    - cron: "0 7 * * *"
+
+jobs:
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests with coverage
+        env:
+          # LangSmith tracing disabled in CI to avoid API key requirement
+          LANGCHAIN_TRACING_V2: "false"
+          LANGCHAIN_API_KEY: "dummy-for-ci"
+          ANTHROPIC_API_KEY: "dummy-for-ci"
+          WATCHLIST_PATH: "watchlist.yaml"
+        run: |
+          pytest \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            -m "not integration and not slow" \
+            -v
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t critical-minerals-agent:ci .
+
+      - name: Smoke test — health endpoint
+        run: |
+          docker run -d \
+            --name test-agent \
+            -p 8000:8000 \
+            -e ANTHROPIC_API_KEY=dummy \
+            -e LANGCHAIN_TRACING_V2=false \
+            -e LANGCHAIN_API_KEY=dummy \
+            critical-minerals-agent:ci
+          sleep 10
+          curl --retry 5 --retry-delay 2 --fail http://localhost:8000/health
+          docker stop test-agent
+
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install ruff
+      - run: ruff check src/ tests/ --select=E,F,W --ignore=E501
