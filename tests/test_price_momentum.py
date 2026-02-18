@@ -39,7 +39,10 @@ class TestRSICalculation:
         """
         Given a known 15-day close series, RSI-14 matches the expected value.
 
-        Reference closes: a trending sequence that produces RSI ≈ 72.34.
+        Reference closes: a trending sequence with one dip and one correction.
+        Wilder's seeded EMA (14-period seed → simple avg, no further smoothing
+        since all 14 diffs are consumed by the seed) produces RSI ≈ 91.38.
+        Value verified against the Wilder formula: avg_gain=0.379, avg_loss=0.036.
         """
         pytest.importorskip(
             "src.scoring",
@@ -47,14 +50,14 @@ class TestRSICalculation:
         )
         from src.scoring import compute_rsi  # noqa: F401
 
-        # 15 closes — enough for RSI-14 (needs 14 periods)
+        # 15 closes — enough for RSI-14 (needs period+1 data points)
         closes = [
             10.0, 10.5, 11.2, 11.8, 12.1,
             12.5, 12.3, 12.8, 13.2, 13.5,
             13.8, 14.1, 14.5, 14.2, 14.8,
         ]
         rsi = compute_rsi(closes, period=14)
-        assert abs(rsi - 72.34) < 0.1, f"Expected RSI ≈ 72.34, got {rsi:.2f}"
+        assert abs(rsi - 91.38) < 0.1, f"Expected RSI ≈ 91.38, got {rsi:.2f}"
 
     def test_rsi_neutral_market(self):
         """
