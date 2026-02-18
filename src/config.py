@@ -23,8 +23,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Anthropic
-    anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
+    # Google Gemini
+    google_api_key: str = Field(default="", alias="GOOGLE_API_KEY")
 
     # LangSmith
     langchain_tracing_v2: bool = Field(default=False, alias="LANGCHAIN_TRACING_V2")
@@ -45,9 +45,9 @@ class Settings(BaseSettings):
     price_lookback_days: int = Field(default=30, alias="PRICE_LOOKBACK_DAYS")
     news_lookback_hours: int = Field(default=48, alias="NEWS_LOOKBACK_HOURS")
     max_filings_per_ticker: int = Field(default=5, alias="MAX_FILINGS_PER_TICKER")
-    claude_model: str = Field(default="claude-sonnet-4-6", alias="CLAUDE_MODEL")
-    claude_temperature: float = Field(default=0.0, alias="CLAUDE_TEMPERATURE")
-    claude_max_tokens: int = Field(default=1024, alias="CLAUDE_MAX_TOKENS")
+    gemini_model: str = Field(default="gemini-2.0-flash", alias="GEMINI_MODEL")
+    gemini_temperature: float = Field(default=0.0, alias="GEMINI_TEMPERATURE")
+    gemini_max_tokens: int = Field(default=1024, alias="GEMINI_MAX_TOKENS")
 
     # FastAPI
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")

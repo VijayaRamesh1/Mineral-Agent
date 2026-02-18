@@ -44,7 +44,7 @@ def make_valid_signal(**kwargs) -> dict:
         "signal_id": str(uuid4()),
         "run_id": str(uuid4()),
         "langsmith_url": "https://smith.langchain.com/o/default/projects/test/runs/abc123",
-        "model_version": "claude-sonnet-4-6",
+        "model_version": "gemini-2.0-flash",
         "prompt_hash": compute_prompt_hash("test prompt"),
         "generated_at": datetime(2024, 1, 15, 9, 0, 0, tzinfo=timezone.utc),
         "data_latency_note": "prices are prior-day close",

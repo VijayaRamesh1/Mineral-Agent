@@ -4,7 +4,7 @@ Filing Scanner agent — Phase 1.
 Responsibilities:
   - Query EDGAR EFTS (full-text search) for recent 8-K/10-Q/10-K filings
   - Download exhibit text for each filing via EDGAR archives
-  - Call Claude (claude-sonnet-4-6) with structured tool use to extract FilingModel fields
+  - Call Gemini with function calling to extract FilingModel fields
   - Validate output with Pydantic; append to state["filings"]
 
 Rate limiting: 10 req/s max against all EDGAR endpoints (SEC fair-use policy).
@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import anthropic
+import google.generativeai as genai
 
 from src.config import settings
 from src.edgar import EdgarClient, fetch_exhibit_text, query_efts
@@ -33,73 +33,79 @@ EDGAR_ARCHIVES_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/
 
 
 # ---------------------------------------------------------------------------
-# Claude extraction tool definition
+# Gemini function calling tool definition
 # ---------------------------------------------------------------------------
 
-_EXTRACTION_TOOL: dict[str, Any] = {
-    "name": "extract_filing_signals",
-    "description": (
-        "Extract structured investment signals from an EDGAR filing document. "
-        "Only mark a boolean True when the filing explicitly describes that event. "
-        "Do not infer or guess."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "summary": {
-                "type": "string",
+_EXTRACTION_TOOLS: list[dict[str, Any]] = [
+    {
+        "function_declarations": [
+            {
+                "name": "extract_filing_signals",
                 "description": (
-                    "2-3 sentence summary of the filing's key announcements. "
-                    "Max 2000 characters. Focus on material events only."
+                    "Extract structured investment signals from an EDGAR filing document. "
+                    "Only mark a boolean True when the filing explicitly describes that event. "
+                    "Do not infer or guess."
                 ),
-            },
-            "resource_estimate_new": {
-                "type": "boolean",
-                "description": "True only if the filing announces a NEW NI 43-101 or SK-1300 mineral resource estimate.",
-            },
-            "resource_estimate_updated": {
-                "type": "boolean",
-                "description": "True only if the filing updates an EXISTING resource estimate.",
-            },
-            "permit_granted": {
-                "type": "boolean",
-                "description": "True only if a regulatory permit or license was approved.",
-            },
-            "jv_announced": {
-                "type": "boolean",
-                "description": "True only if a joint venture or strategic partnership was announced.",
-            },
-            "production_update": {
-                "type": "boolean",
-                "description": "True only if the filing contains an operational or production milestone update.",
-            },
-            "financing_announced": {
-                "type": "boolean",
-                "description": "True only if an equity raise, debt financing, or offtake agreement was announced.",
-            },
-            "negative_flag": {
-                "type": "boolean",
-                "description": "True only if the filing describes an adverse event: suspension, regulatory fine, impairment writedown, or enforcement action.",
-            },
-            "key_entities": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "List of key companies, agencies, or named projects mentioned.",
-            },
-        },
-        "required": [
-            "summary",
-            "resource_estimate_new",
-            "resource_estimate_updated",
-            "permit_granted",
-            "jv_announced",
-            "production_update",
-            "financing_announced",
-            "negative_flag",
-            "key_entities",
-        ],
-    },
-}
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "summary": {
+                            "type": "string",
+                            "description": (
+                                "2-3 sentence summary of the filing's key announcements. "
+                                "Max 2000 characters. Focus on material events only."
+                            ),
+                        },
+                        "resource_estimate_new": {
+                            "type": "boolean",
+                            "description": "True only if the filing announces a NEW NI 43-101 or SK-1300 mineral resource estimate.",
+                        },
+                        "resource_estimate_updated": {
+                            "type": "boolean",
+                            "description": "True only if the filing updates an EXISTING resource estimate.",
+                        },
+                        "permit_granted": {
+                            "type": "boolean",
+                            "description": "True only if a regulatory permit or license was approved.",
+                        },
+                        "jv_announced": {
+                            "type": "boolean",
+                            "description": "True only if a joint venture or strategic partnership was announced.",
+                        },
+                        "production_update": {
+                            "type": "boolean",
+                            "description": "True only if the filing contains an operational or production milestone update.",
+                        },
+                        "financing_announced": {
+                            "type": "boolean",
+                            "description": "True only if an equity raise, debt financing, or offtake agreement was announced.",
+                        },
+                        "negative_flag": {
+                            "type": "boolean",
+                            "description": "True only if the filing describes an adverse event: suspension, regulatory fine, impairment writedown, or enforcement action.",
+                        },
+                        "key_entities": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of key companies, agencies, or named projects mentioned.",
+                        },
+                    },
+                    "required": [
+                        "summary",
+                        "resource_estimate_new",
+                        "resource_estimate_updated",
+                        "permit_granted",
+                        "jv_announced",
+                        "production_update",
+                        "financing_announced",
+                        "negative_flag",
+                        "key_entities",
+                    ],
+                },
+            }
+        ]
+    }
+]
 
 _SYSTEM_PROMPT = (
     "You are a mining and critical minerals analyst. "
@@ -109,7 +115,7 @@ _SYSTEM_PROMPT = (
 
 
 # ---------------------------------------------------------------------------
-# Watchlist CIK loader
+# Gemini extraction
 # ---------------------------------------------------------------------------
 
 
@@ -132,7 +138,7 @@ def _load_cik_map() -> dict[str, str | None]:
 
 
 # ---------------------------------------------------------------------------
-# Claude extraction
+# Watchlist CIK loader
 # ---------------------------------------------------------------------------
 
 
@@ -143,9 +149,9 @@ def _extract_signals(
     filing_meta: dict[str, Any],
 ) -> FilingModel | None:
     """
-    Call Claude with tool use to extract FilingModel signals from exhibit text.
+    Call Gemini with function calling to extract FilingModel signals from exhibit text.
 
-    Returns None if Claude fails or output fails Pydantic validation.
+    Returns None if Gemini fails or output fails Pydantic validation.
     """
     if not text.strip():
         logger.warning("filing_scanner: empty exhibit text for %s", ticker)
@@ -159,37 +165,48 @@ def _extract_signals(
     )
 
     try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        response = client.messages.create(
-            model=settings.claude_model,
-            max_tokens=settings.claude_max_tokens,
-            temperature=settings.claude_temperature,
-            system=_SYSTEM_PROMPT,
-            tools=[_EXTRACTION_TOOL],
-            tool_choice={"type": "tool", "name": "extract_filing_signals"},
-            messages=[{"role": "user", "content": prompt}],
+        genai.configure(api_key=settings.google_api_key)
+        model = genai.GenerativeModel(
+            model_name=settings.gemini_model,
+            system_instruction=_SYSTEM_PROMPT,
+            tools=_EXTRACTION_TOOLS,
+        )
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(
+                temperature=settings.gemini_temperature,
+                max_output_tokens=settings.gemini_max_tokens,
+            ),
+            tool_config={
+                "function_calling_config": {
+                    "mode": "ANY",
+                    "allowed_function_names": ["extract_filing_signals"],
+                }
+            },
         )
     except Exception as exc:
         logger.warning(
-            "filing_scanner: Claude call failed for %s/%s: %s",
+            "filing_scanner: Gemini call failed for %s/%s: %s",
             ticker,
             filing_meta.get("accession_number", ""),
             exc,
         )
         return None
 
-    # Extract tool_use block from response
-    tool_block = next(
-        (b for b in response.content if b.type == "tool_use"),
-        None,
-    )
-    if tool_block is None:
+    # Extract function_call from response
+    try:
+        part = response.candidates[0].content.parts[0]
+        function_call = part.function_call
+    except (IndexError, AttributeError):
+        function_call = None
+
+    if function_call is None or not hasattr(function_call, "args"):
         logger.warning(
-            "filing_scanner: no tool_use block in Claude response for %s", ticker
+            "filing_scanner: no function_call in Gemini response for %s", ticker
         )
         return None
 
-    signals: dict[str, Any] = tool_block.input  # type: ignore[attr-defined]
+    signals: dict[str, Any] = dict(function_call.args)
 
     # Parse filed_date
     try:
@@ -253,13 +270,13 @@ def _extract_signals(
 @trace(name="filing_scanner", tags=["phase-1", "edgar"])
 def filing_scanner_node(state: AgentState) -> dict[str, Any]:
     """
-    Phase 1 implementation: query EDGAR, extract signals via Claude.
+    Phase 1 implementation: query EDGAR, extract signals via Gemini.
 
     For each watchlist ticker:
       1. Looks up its EDGAR CIK from watchlist.yaml (None for foreign/OTC).
       2. Queries EDGAR EFTS for 8-K/10-Q/10-K filings in the last 48 hours.
       3. Downloads the primary exhibit text (requires CIK for archive URL).
-      4. Calls Claude to extract FilingModel boolean signals via tool use.
+      4. Calls Gemini to extract FilingModel boolean signals via function calling.
       5. Validates with Pydantic and appends to state["filings"].
 
     Tickers without EDGAR coverage are attempted with a ticker-symbol search;
@@ -329,13 +346,13 @@ def filing_scanner_node(state: AgentState) -> dict[str, Any]:
             )
             if not text:
                 logger.info(
-                    "filing_scanner: empty exhibit for %s/%s — skipping Claude call",
+                    "filing_scanner: empty exhibit for %s/%s — skipping Gemini call",
                     ticker,
                     accession,
                 )
                 continue
 
-            # Extract signals via Claude tool use
+            # Extract signals via Gemini function calling
             model = _extract_signals(text, ticker, run_id, meta)
             if model is None:
                 msg = f"filing_scanner: extraction failed for {ticker}/{accession}"

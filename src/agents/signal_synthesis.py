@@ -4,7 +4,7 @@ Signal Synthesis agent — Phase 3.
 Responsibilities:
   - For each ticker, combine filings + news + price + geo into ScoreBreakdown
   - Apply deterministic scoring rubric (no LLM for score → direction mapping)
-  - Call Claude (temperature=0) to generate evidence list and confidence
+  - Call Gemini (temperature=0) to generate evidence list and confidence
   - Validate full SignalModel with Pydantic (ValidationError on bad output)
   - Apply hallucination guard: every evidence claim must have a source_url
     that was present in the prompt context (enforced by EvidenceItem required field)
@@ -17,7 +17,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-import anthropic
+import google.generativeai as genai
 
 from src.config import settings
 from src.models import (
@@ -39,52 +39,57 @@ from src.tracing import get_langsmith_run_url, trace
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Claude tool definition for signal synthesis
+# Gemini function calling tool definition for signal synthesis
 # ---------------------------------------------------------------------------
 
-_SYNTHESIS_TOOL: dict[str, Any] = {
-    "name": "synthesize_signal",
-    "description": (
-        "Produce a confidence rating and evidence list for a critical minerals "
-        "investment signal. Only cite URLs from the provided context. "
-        "Do NOT invent facts or sources."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "confidence": {
-                "type": "string",
-                "enum": ["LOW", "MED", "HIGH"],
+_SYNTHESIS_TOOLS: list[dict[str, Any]] = [
+    {
+        "function_declarations": [
+            {
+                "name": "synthesize_signal",
                 "description": (
-                    "Data quality and signal consensus. "
-                    "HIGH = strong multi-source alignment; "
-                    "MED = some supporting signals, mixed data; "
-                    "LOW = thin or conflicting data."
+                    "Produce a confidence rating and evidence list for a critical minerals "
+                    "investment signal. Only cite URLs from the provided context. "
+                    "Do NOT invent facts or sources."
                 ),
-            },
-            "evidence": {
-                "type": "array",
-                "items": {
+                "parameters": {
                     "type": "object",
                     "properties": {
-                        "claim": {
+                        "confidence": {
                             "type": "string",
-                            "description": "Specific factual claim from the data. Max 500 chars.",
+                            "enum": ["LOW", "MED", "HIGH"],
+                            "description": (
+                                "Data quality and signal consensus. "
+                                "HIGH = strong multi-source alignment; "
+                                "MED = some supporting signals, mixed data; "
+                                "LOW = thin or conflicting data."
+                            ),
                         },
-                        "source_url": {
-                            "type": "string",
-                            "description": "URL from the provided context that supports this claim.",
+                        "evidence": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "claim": {
+                                        "type": "string",
+                                        "description": "Specific factual claim from the data. Max 500 chars.",
+                                    },
+                                    "source_url": {
+                                        "type": "string",
+                                        "description": "URL from the provided context that supports this claim.",
+                                    },
+                                },
+                                "required": ["claim", "source_url"],
+                            },
+                            "description": "Evidence items supporting the signal. Every claim must have a source URL.",
                         },
                     },
-                    "required": ["claim", "source_url"],
+                    "required": ["confidence", "evidence"],
                 },
-                "minItems": 1,
-                "description": "Evidence items supporting the signal. Every claim must have a source URL.",
-            },
-        },
-        "required": ["confidence", "evidence"],
-    },
-}
+            }
+        ]
+    }
+]
 
 _SYNTHESIS_SYSTEM = (
     "You are a critical minerals investment analyst. "
@@ -146,7 +151,7 @@ def _build_context(
     price: dict[str, Any],
     geo: list[dict[str, Any]],
 ) -> str:
-    """Build the text context fed to Claude for evidence extraction."""
+    """Build the text context fed to Gemini for evidence extraction."""
     lines: list[str] = []
     lines.append(f"TICKER: {ticker}")
     lines.append(f"SIGNAL SCORE: {score}/100  DIRECTION: {direction}")
@@ -217,49 +222,60 @@ def _build_context(
 
 
 # ---------------------------------------------------------------------------
-# Claude call
+# Gemini call
 # ---------------------------------------------------------------------------
 
 
-def _call_claude(
+def _call_gemini(
     context: str,
     ticker: str,
     run_id: str,
 ) -> tuple[Literal["LOW", "MED", "HIGH"], list[dict[str, str]]] | None:
     """
-    Call Claude with the synthesis tool to get confidence + evidence.
+    Call Gemini with the synthesis function to get confidence + evidence.
 
     Returns (confidence, evidence_items) or None on failure.
     """
     try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        response = client.messages.create(
-            model=settings.claude_model,
-            max_tokens=settings.claude_max_tokens,
-            temperature=0,
-            system=_SYNTHESIS_SYSTEM,
-            tools=[_SYNTHESIS_TOOL],
-            tool_choice={"type": "tool", "name": "synthesize_signal"},
-            messages=[{"role": "user", "content": context}],
+        genai.configure(api_key=settings.google_api_key)
+        model = genai.GenerativeModel(
+            model_name=settings.gemini_model,
+            system_instruction=_SYNTHESIS_SYSTEM,
+            tools=_SYNTHESIS_TOOLS,
+        )
+        response = model.generate_content(
+            context,
+            generation_config=genai.GenerationConfig(
+                temperature=0,
+                max_output_tokens=settings.gemini_max_tokens,
+            ),
+            tool_config={
+                "function_calling_config": {
+                    "mode": "ANY",
+                    "allowed_function_names": ["synthesize_signal"],
+                }
+            },
         )
     except Exception as exc:
-        logger.warning("signal_synthesis: Claude call failed for %s: %s", ticker, exc)
+        logger.warning("signal_synthesis: Gemini call failed for %s: %s", ticker, exc)
         return None
 
-    tool_block = next(
-        (b for b in response.content if b.type == "tool_use"),
-        None,
-    )
-    if tool_block is None:
-        logger.warning("signal_synthesis: no tool_use block for %s", ticker)
+    try:
+        part = response.candidates[0].content.parts[0]
+        function_call = part.function_call
+    except (IndexError, AttributeError):
+        function_call = None
+
+    if function_call is None or not hasattr(function_call, "args"):
+        logger.warning("signal_synthesis: no function_call in Gemini response for %s", ticker)
         return None
 
-    inp: dict[str, Any] = tool_block.input  # type: ignore[attr-defined]
+    inp: dict[str, Any] = dict(function_call.args)
     confidence = inp.get("confidence", "LOW")
     if confidence not in ("LOW", "MED", "HIGH"):
         confidence = "LOW"
 
-    evidence_raw = inp.get("evidence", [])
+    evidence_raw = list(inp.get("evidence", []))
     if not evidence_raw:
         # Fallback: minimal evidence item
         evidence_raw = [
@@ -291,7 +307,7 @@ def signal_synthesis_node(state: AgentState) -> dict[str, Any]:
            geo     (0–15): compute_geo_score over events affecting the ticker
            novelty (0–5):  +3 if new filings present, +2 if new news present
       3. Derives direction deterministically from total score (no LLM).
-      4. Calls Claude (temperature=0) via tool use to get:
+      4. Calls Gemini (temperature=0) via function calling to get:
            - confidence (LOW/MED/HIGH)
            - evidence list (each claim + source_url from the provided context)
       5. Validates the full SignalModel with Pydantic.
@@ -376,7 +392,7 @@ def signal_synthesis_node(state: AgentState) -> dict[str, Any]:
         total = breakdown.total
         direction = build_signal_direction(total)
 
-        # ── 3. Build Claude context and call ────────────────────────────────
+        # ── 3. Build Gemini context and call ────────────────────────────────
         context = _build_context(
             ticker=ticker,
             score=total,
@@ -388,17 +404,17 @@ def signal_synthesis_node(state: AgentState) -> dict[str, Any]:
         )
         prompt_hash = compute_prompt_hash(_SYNTHESIS_SYSTEM + context)
 
-        result = _call_claude(context, ticker, run_id)
+        result = _call_gemini(context, ticker, run_id)
         if result is None:
-            # Claude failed — build a minimal fallback signal without evidence
+            # Gemini failed — build a minimal fallback signal without evidence
             confidence: Literal["LOW", "MED", "HIGH"] = "LOW"
             evidence_raw: list[dict[str, str]] = [
                 {
-                    "claim": f"Signal synthesis Claude call failed for {ticker}; score computed deterministically.",
+                    "claim": f"Signal synthesis Gemini call failed for {ticker}; score computed deterministically.",
                     "source_url": _edgar_search_url(ticker),
                 }
             ]
-            errors.append(f"signal_synthesis: Claude call failed for {ticker}")
+            errors.append(f"signal_synthesis: Gemini call failed for {ticker}")
         else:
             confidence, evidence_raw = result
 
@@ -428,7 +444,7 @@ def signal_synthesis_node(state: AgentState) -> dict[str, Any]:
             signal = SignalModel(
                 run_id=run_id,
                 langsmith_url=get_langsmith_run_url(run_id),
-                model_version=settings.claude_model,
+                model_version=settings.gemini_model,
                 prompt_hash=prompt_hash,
                 data_latency_note="prices are prior-day close; news within last 48 h",
                 ticker=ticker,

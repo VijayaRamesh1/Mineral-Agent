@@ -6,10 +6,9 @@
 langgraph>=0.2
 langsmith>=0.1
 langchain-core>=0.2
-langchain-anthropic>=0.1
 
-# --- Anthropic Claude ---
-anthropic>=0.30
+# --- Google Gemini ---
+google-generativeai>=0.8
 
 # --- Data / Finance ---
 # yfinance==0.2.38  # pinned per PRD; install with: pip install yfinance==0.2.38 --no-build-isolation
