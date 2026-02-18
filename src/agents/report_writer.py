@@ -6,18 +6,26 @@ Responsibilities:
   - NO LLM involved — pure deterministic template rendering
   - Validate ReportModel (disclaimer_present is a required Pydantic field)
   - Write report_md to state["report_md"]
-  - Persist report to SQLite
+
+memory_agent_node also lives here:
+  - Persists SignalModel dicts to SQLite via src.db helpers
+  - Persists run metadata to SQLite runs table
+  - Returns {} (no state mutations — side effects only)
 
 Template: templates/report.md.j2
-
-Phase 0: stub implementation.
 """
 
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound
+
+from src.db import persist_run, persist_signal
+from src.models import ReportModel
 from src.state import AgentState
 from src.tracing import trace
 
@@ -32,43 +40,175 @@ LEGAL_DISCLAIMER = (
     "guarantee future results."
 )
 
+# Template directory: src/agents/ -> src/ -> project root -> templates/
+_TEMPLATE_DIR = Path(__file__).parent.parent.parent / "templates"
+
+
+# ---------------------------------------------------------------------------
+# Jinja2 environment
+# ---------------------------------------------------------------------------
+
+
+def _make_jinja_env(template_dir: Path | None = None) -> Environment:
+    """Create a Jinja2 Environment with the strftime filter registered."""
+    env = Environment(
+        loader=FileSystemLoader(str(template_dir or _TEMPLATE_DIR)),
+        autoescape=False,
+    )
+
+    def _strftime(dt: Any, fmt: str) -> str:
+        if dt is None:
+            return ""
+        if isinstance(dt, str):
+            return dt
+        return dt.strftime(fmt)
+
+    env.filters["strftime"] = _strftime
+    return env
+
+
+# ---------------------------------------------------------------------------
+# report_writer_node
+# ---------------------------------------------------------------------------
+
 
 @trace(name="report_writer", tags=["phase-4", "report"])
 def report_writer_node(state: AgentState) -> dict[str, Any]:
     """
-    STUB — Phase 4 implementation pending (Session 5).
+    Phase 4 implementation: render the Jinja2 daily report.
 
-    Will:
+    Steps:
       1. Load Jinja2 template from templates/report.md.j2.
       2. Render with state["signals"] and run metadata.
-      3. Assert disclaimer is present in rendered output.
+      3. Ensure legal disclaimer is present in rendered output.
       4. Validate ReportModel (disclaimer_present=True required).
       5. Return {"report_md": rendered_markdown_string}.
 
-    Note: This node must NEVER call Claude or any LLM. Report formatting
-    is deterministic — only template variable substitution.
+    This node NEVER calls any LLM. Report formatting is deterministic.
     """
-    logger.info(
-        "report_writer: STUB — skipping report render (Phase 4 not yet implemented)"
-    )
-    return {"report_md": ""}
+    signals: list[dict[str, Any]] = state.get("signals", [])
+    run_id: str = state.get("run_id", "unknown")
+    watchlist: list[str] = state.get("watchlist", [])
+
+    bull_count = sum(1 for s in signals if s.get("direction") == "BULL")
+    watch_count = sum(1 for s in signals if s.get("direction") == "WATCH")
+    bear_count = sum(1 for s in signals if s.get("direction") == "BEAR")
+    model_version = signals[0].get("model_version", "unknown") if signals else "unknown"
+    generated_at = datetime.now(timezone.utc)
+
+    # ── Render Jinja2 template ───────────────────────────────────────────────
+    try:
+        env = _make_jinja_env()
+        template = env.get_template(TEMPLATE_NAME)
+        report_md = template.render(
+            run_id=run_id,
+            generated_at=generated_at,
+            signals=signals,
+            bull_count=bull_count,
+            watch_count=watch_count,
+            bear_count=bear_count,
+            model_version=model_version,
+        )
+        logger.info("report_writer: template rendered (%d chars)", len(report_md))
+    except TemplateNotFound:
+        logger.error(
+            "report_writer: template %s not found in %s", TEMPLATE_NAME, _TEMPLATE_DIR
+        )
+        report_md = (
+            f"# Critical Minerals Signal Hunter\n\n"
+            f"Run ID: `{run_id}`\n\n"
+            f"*{len(signals)} signals generated.*\n\n"
+            f"## DISCLAIMER\n\n{LEGAL_DISCLAIMER}"
+        )
+    except Exception as exc:
+        logger.error("report_writer: template rendering failed: %s", exc)
+        report_md = (
+            f"# Critical Minerals Signal Hunter\n\n"
+            f"Run ID: `{run_id}`\n\n"
+            f"## DISCLAIMER\n\n{LEGAL_DISCLAIMER}"
+        )
+
+    # ── Ensure disclaimer is present (hard PRD requirement) ─────────────────
+    if "DISCLAIMER" not in report_md:
+        logger.warning("report_writer: DISCLAIMER not found in report — appending")
+        report_md += f"\n\n## DISCLAIMER\n\n{LEGAL_DISCLAIMER}"
+
+    disclaimer_present = "DISCLAIMER" in report_md
+
+    # ── Validate ReportModel ─────────────────────────────────────────────────
+    try:
+        ReportModel(
+            run_id=run_id,
+            ticker_count=len(watchlist),
+            signal_count=len(signals),
+            bull_count=bull_count,
+            watch_count=watch_count,
+            bear_count=bear_count,
+            disclaimer_present=disclaimer_present,
+        )
+        logger.info(
+            "report_writer: ReportModel validated — signals=%d bull=%d watch=%d bear=%d",
+            len(signals),
+            bull_count,
+            watch_count,
+            bear_count,
+        )
+    except Exception as exc:
+        logger.error("report_writer: ReportModel validation failed: %s", exc)
+
+    return {"report_md": report_md}
+
+
+# ---------------------------------------------------------------------------
+# memory_agent_node
+# ---------------------------------------------------------------------------
 
 
 @trace(name="memory_agent", tags=["phase-4", "memory"])
 def memory_agent_node(state: AgentState) -> dict[str, Any]:
     """
-    Memory / persistence agent — Phase 4.
+    Phase 4 implementation: persist signals and run metadata to SQLite.
 
-    STUB — Phase 4 implementation pending (Session 5).
-
-    Will:
-      1. Persist each SignalModel in state["signals"] to SQLite.
-      2. Persist run metadata to SQLite runs table.
-      3. Compute novelty scores by comparing current signals to
-         previous run in SQLite (feeds back into signal_synthesis in Phase 3).
-      4. Return {} (no state mutations — side effects only).
+    Steps:
+      1. Persist each SignalModel dict in state["signals"] to the signals table.
+      2. Persist run metadata to the runs table.
+      3. Return {} (no state mutations — side effects only).
     """
-    logger.info(
-        "memory_agent: STUB — skipping SQLite persistence (Phase 4 not yet implemented)"
-    )
+    signals: list[dict[str, Any]] = state.get("signals", [])
+    run_id: str = state.get("run_id", "unknown")
+    errors: list[str] = state.get("errors", [])
+    watchlist: list[str] = state.get("watchlist", [])
+    report_md: str = state.get("report_md", "")
+
+    # ── Persist signals ──────────────────────────────────────────────────────
+    success_count = 0
+    for signal_dict in signals:
+        try:
+            persist_signal(signal_dict)
+            success_count += 1
+        except Exception as exc:
+            logger.warning(
+                "memory_agent: failed to persist signal for %s: %s",
+                signal_dict.get("ticker", "?"),
+                exc,
+            )
+
+    # ── Persist run record ───────────────────────────────────────────────────
+    try:
+        persist_run(
+            run_id=run_id,
+            ticker_count=len(watchlist),
+            signal_count=len(signals),
+            error_count=len(errors),
+            report_md=report_md,
+        )
+        logger.info(
+            "memory_agent: persisted %d/%d signals, run_id=%s",
+            success_count,
+            len(signals),
+            run_id,
+        )
+    except Exception as exc:
+        logger.warning("memory_agent: failed to persist run metadata: %s", exc)
+
     return {}
