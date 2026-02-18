@@ -10,13 +10,26 @@ compute_rsi(closes, period)
     RSI-14 via Wilder's seeded exponential smoothing.
 compute_return(closes, period)
     Simple period return: (close[-1] - close[-(period+1)]) / close[-(period+1)].
-compute_price_score(price_model)
+compute_filing_score(filing)
+    Map FilingModel boolean signals to a -10 to 30 integer component score.
+compute_price_score(...)
     Map PriceModel metrics to a 0–25 integer component score.
+compute_news_score(news_items)
+    Map news sentiment items to a 0–25 integer component score.
+compute_geo_score(geo_events)
+    Map geopolitical risk events to a 0–15 integer component score.
 """
 
 from __future__ import annotations
 
 from typing import Any, Sequence
+
+
+def _v(obj: Any, key: str, default: Any = None) -> Any:
+    """Get a value from either a dict or an object attribute."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
 
 
 def compute_rsi(closes: Sequence[float], period: int = 14) -> float:
@@ -182,3 +195,57 @@ def compute_price_score(
             score += 3
 
     return max(0, min(25, score))
+
+
+def compute_news_score(news_items: Sequence[Any]) -> int:
+    """
+    Map news sentiment items to a 0–25 integer component score.
+
+    Accepts a sequence of NewsItem objects or equivalent dicts.
+
+    Scoring rubric (additive, capped at 25):
+      - POSITIVE with relevance >= 70: +5
+      - POSITIVE with relevance >= 40: +3
+      - POSITIVE with any relevance:   +1
+      - NEGATIVE item:                 -3
+      - NEUTRAL item:                  +0
+    """
+    score = 0
+    for item in news_items:
+        sentiment = _v(item, "sentiment")
+        relevance = _v(item, "relevance_score", 0) or 0
+        if sentiment == "POSITIVE":
+            if relevance >= 70:
+                score += 5
+            elif relevance >= 40:
+                score += 3
+            else:
+                score += 1
+        elif sentiment == "NEGATIVE":
+            score -= 3
+    return max(0, min(25, score))
+
+
+def compute_geo_score(geo_events: Sequence[Any]) -> int:
+    """
+    Map geopolitical risk events to a 0–15 integer component score.
+
+    Accepts a sequence of GeoEvent objects or equivalent dicts.
+
+    Uses the maximum geo_risk_score (0–100) across all provided events,
+    scaled proportionally to the 0–15 component range.
+
+    Parameters
+    ----------
+    geo_events : sequence
+        GeoEvent models or dicts with a ``geo_risk_score`` field.
+
+    Returns
+    -------
+    int
+        0–15 component score.
+    """
+    if not geo_events:
+        return 0
+    max_risk = max((_v(e, "geo_risk_score", 0) or 0 for e in geo_events), default=0)
+    return max(0, min(15, round(max_risk * 0.15)))
