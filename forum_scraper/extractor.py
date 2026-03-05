@@ -1,10 +1,10 @@
 """
-Pain point extractor — uses Claude to analyse raw forum threads and
+Pain point extractor — uses Gemini Flash to analyse raw forum threads and
 return structured PainPoint objects.
 
 For each thread:
   1. Build a compact prompt with all post content.
-  2. Ask Claude to identify pain points and solutions in JSON.
+  2. Ask Gemini to identify pain points and solutions in JSON.
   3. Validate the response with Pydantic models.
 
 Batching strategy:
@@ -19,9 +19,9 @@ import logging
 from textwrap import dedent
 from typing import Any
 
-import anthropic
+import google.generativeai as genai
 
-from .config import ANTHROPIC_API_KEY, CLAUDE_MODEL
+from .config import GEMINI_MODEL, GOOGLE_API_KEY
 from .models import (
     Category,
     PainPoint,
@@ -33,7 +33,7 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-BATCH_SIZE = 5   # threads per Claude call
+BATCH_SIZE = 5   # threads per Gemini call
 
 
 # ---------------------------------------------------------------------------
@@ -110,30 +110,35 @@ def _build_user_prompt(threads: list[RawThread]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Claude caller
+# Gemini caller
 # ---------------------------------------------------------------------------
 
-def _call_claude(threads: list[RawThread]) -> list[dict[str, Any]]:
-    """Call Claude API for a batch of threads; return raw pain_points list."""
-    if not ANTHROPIC_API_KEY:
+def _call_gemini(threads: list[RawThread]) -> list[dict[str, Any]]:
+    """Call Gemini Flash API for a batch of threads; return raw pain_points list."""
+    if not GOOGLE_API_KEY:
         raise RuntimeError(
-            "ANTHROPIC_API_KEY is not set. "
-            "Export it before running the scraper: export ANTHROPIC_API_KEY=sk-ant-..."
+            "GOOGLE_API_KEY is not set. "
+            "Export it before running the scraper: export GOOGLE_API_KEY=AIza..."
         )
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    user_prompt = _build_user_prompt(threads)
-
-    logger.debug("Sending %d threads to Claude (%s)", len(threads), CLAUDE_MODEL)
-
-    message = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=4096,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
+    genai.configure(api_key=GOOGLE_API_KEY)
+    model = genai.GenerativeModel(
+        model_name=GEMINI_MODEL,
+        system_instruction=_SYSTEM_PROMPT,
     )
 
-    raw_text = message.content[0].text.strip()
+    user_prompt = _build_user_prompt(threads)
+    logger.debug("Sending %d threads to Gemini (%s)", len(threads), GEMINI_MODEL)
+
+    response = model.generate_content(
+        user_prompt,
+        generation_config=genai.GenerationConfig(
+            max_output_tokens=4096,
+            temperature=0.0,
+        ),
+    )
+
+    raw_text = response.text.strip()
 
     # Strip markdown code fences if present
     if raw_text.startswith("```"):
@@ -145,7 +150,7 @@ def _call_claude(threads: list[RawThread]) -> list[dict[str, Any]]:
     try:
         data = json.loads(raw_text)
     except json.JSONDecodeError as exc:
-        logger.error("Claude returned invalid JSON: %s\nRaw: %s", exc, raw_text[:500])
+        logger.error("Gemini returned invalid JSON: %s\nRaw: %s", exc, raw_text[:500])
         return []
 
     return data.get("pain_points", [])
@@ -212,7 +217,7 @@ def _coerce_pain_point(raw: dict, thread: RawThread) -> PainPoint | None:
 
 def extract_pain_points(threads: list[RawThread]) -> list[PainPoint]:
     """
-    Extract pain points from a list of RawThreads using Claude.
+    Extract pain points from a list of RawThreads using Gemini Flash.
 
     Threads are batched (BATCH_SIZE at a time) to reduce API calls.
     Returns a flat list of validated PainPoint objects.
@@ -229,9 +234,9 @@ def extract_pain_points(threads: list[RawThread]) -> list[PainPoint]:
         logger.info("Batch %d/%d — threads: %s", batch_idx, len(batches),
                     [t.title[:40] for t in batch])
         try:
-            raw_items = _call_claude(batch)
+            raw_items = _call_gemini(batch)
         except Exception as exc:  # noqa: BLE001
-            logger.error("Claude call failed for batch %d: %s", batch_idx, exc)
+            logger.error("Gemini call failed for batch %d: %s", batch_idx, exc)
             continue
 
         for item in raw_items:

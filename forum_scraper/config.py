@@ -108,11 +108,11 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
-# Claude / Anthropic settings
+# Gemini settings (reuses project-wide GOOGLE_API_KEY / GEMINI_MODEL)
 # ---------------------------------------------------------------------------
 
-ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
+GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 
 # ---------------------------------------------------------------------------
