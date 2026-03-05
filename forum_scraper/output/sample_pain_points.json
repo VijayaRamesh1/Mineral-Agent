@@ -1,0 +1,212 @@
+{
+  "section_id": "a1b2c3d4-0000-0000-0000-000000000001",
+  "forum_name": "Express Entry / Expression of Interest",
+  "forum_slug": "express-entry",
+  "forum_url": "https://www.canadavisa.com/canada-immigration-discussion-board/forums/express-entry-expression-of-interest.56/",
+  "description": "Covers the Federal Skilled Worker Class, Federal Skilled Trades Class, and Canadian Experience Class under Express Entry.",
+  "generated_at": "2026-03-05T10:00:00.000000",
+  "stats": {
+    "threads_scraped": 30,
+    "posts_scraped": 287,
+    "pain_points_extracted": 12,
+    "severity_breakdown": {
+      "critical": 3,
+      "high": 5,
+      "medium": 3,
+      "low": 1
+    },
+    "category_breakdown": {
+      "processing_delays": 4,
+      "documentation": 3,
+      "portal_technical": 2,
+      "points_calculation": 2,
+      "eligibility": 1
+    },
+    "top_categories": [
+      "processing_delays",
+      "documentation",
+      "portal_technical",
+      "points_calculation",
+      "eligibility"
+    ]
+  },
+  "pain_points": [
+    {
+      "pain_point_id": "pp-001",
+      "forum_slug": "express-entry",
+      "thread_id": "t-001",
+      "thread_title": "My profile has been in 'Application Received' status for 18 months — no update",
+      "thread_url": "https://www.canadavisa.com/canada-immigration-discussion-board/threads/application-received-18-months.12345/",
+      "title": "Indefinite processing delays with no communication from IRCC",
+      "description": "Applicants are experiencing processing times far exceeding published IRCC service standards (6-12 months for PR), with no proactive communication on delays. Many report their applications stuck in 'Application Received' or 'In Progress' for 12-24 months. IRCC's webform response rate is low and responses are generic. Applicants have no reliable mechanism to escalate or receive meaningful status updates.",
+      "category": "processing_delays",
+      "severity": "critical",
+      "frequency_signal": "widespread",
+      "affected_user_types": ["FSW", "CEC", "all Express Entry streams"],
+      "affected_stages": ["AOR received", "background check", "final decision"],
+      "evidence_quotes": [
+        "I submitted in January 2024 and it is now March 2026 with zero updates. The webform just says 'your application is in progress'.",
+        "IRCC told me 6-12 months but my friend waited 22 months for the same NOC. There is zero transparency.",
+        "I called the 1-888 number and they just read from the same website I can already see. Completely useless."
+      ],
+      "tags": ["IRCC delays", "AOR", "processing time", "webform", "transparency"],
+      "solutions": [
+        {
+          "description": "Submit a formal Access to Information and Privacy (ATIP) request to obtain your complete GCMS notes. These notes reveal the current stage, any flags, and officer comments, giving you actionable information.",
+          "status": "official",
+          "source": "https://www.canada.ca/en/immigration-refugees-citizenship/corporate/transparency/access-information-privacy.html",
+          "steps": [
+            "Go to https://atip-aiprp.apps.gc.ca/",
+            "Create a GC Key account or sign in",
+            "Request your GCMS / CAIPS notes (Form ATIP-22, $5 fee)",
+            "Receive notes within 30 days — review for flags or missing documents"
+          ],
+          "caveats": [
+            "ATIP notes are a snapshot in time; new changes may not be visible",
+            "Cost is $5 CAD per request"
+          ],
+          "effort": "low"
+        },
+        {
+          "description": "Submit a Webform inquiry to IRCC citing that your application has exceeded service standards, and explicitly request an update or referral to a supervisor.",
+          "status": "community",
+          "source": "https://secure.cic.gc.ca/enquiries-renseignements/canada-case-cas-eng.aspx",
+          "steps": [
+            "Visit the IRCC Webform",
+            "Select 'I submitted an application' → 'Permanent Residence'",
+            "Explicitly state the number of months elapsed vs. published service standards",
+            "Reference your application number and UCI"
+          ],
+          "caveats": [
+            "Response times for webforms can be 30-90+ days",
+            "Generic automated responses are common"
+          ],
+          "effort": "low"
+        },
+        {
+          "description": "Contact your local Member of Parliament (MP) office. MPs can submit an enquiry to the Minister's office on your behalf, which often triggers a manual review faster than self-submitted webforms.",
+          "status": "community",
+          "source": null,
+          "steps": [
+            "Find your MP at https://www.ourcommons.ca/",
+            "Email or call their constituency office, provide application number and timeline",
+            "MP staff submit a ministerial enquiry — keep them updated"
+          ],
+          "caveats": [
+            "Works best for applications well past service standards (12+ months)",
+            "Some MPs have more proactive immigration staff than others"
+          ],
+          "effort": "medium"
+        }
+      ],
+      "extracted_at": "2026-03-05T10:01:23.000000"
+    },
+    {
+      "pain_point_id": "pp-002",
+      "forum_slug": "express-entry",
+      "thread_id": "t-002",
+      "thread_title": "Uncle / extended family as relative in Canada — how to show on PR form?",
+      "thread_url": "https://www.canadavisa.com/canada-immigration-discussion-board/threads/uncle-relative-pr-form.99999/",
+      "title": "Confusion about how to correctly list relatives in Canada on PR application forms",
+      "description": "Many applicants are unsure whether extended family members (aunts, uncles, cousins) qualify as 'a relative in Canada' for PR application forms such as IMM 5409 and the main IMM 5002 form. IRCC forms use the term 'relative' without clearly defining who qualifies, creating ambiguity. Incorrectly declaring or omitting relatives can lead to misrepresentation findings, which have severe consequences including bans.",
+      "category": "documentation",
+      "severity": "high",
+      "frequency_signal": "frequent",
+      "affected_user_types": ["FSW", "CEC", "all Express Entry streams"],
+      "affected_stages": ["profile creation", "ITA acceptance", "document submission"],
+      "evidence_quotes": [
+        "My uncle is a Canadian citizen. Do I list him? The form says 'relative' but doesn't say what counts.",
+        "I didn't list my cousin and now I'm worried about misrepresentation. Should I amend?",
+        "IRCC's instructions PDF says to list 'any relative' but then the example only shows immediate family."
+      ],
+      "tags": ["relatives in Canada", "IMM forms", "misrepresentation risk", "extended family"],
+      "solutions": [
+        {
+          "description": "List ALL blood relatives and relatives by marriage in Canada, regardless of degree. The IRCC definition of 'relative' for these forms is intentionally broad — when in doubt, include the relative. IRCC officers flag omissions, not over-disclosure.",
+          "status": "official",
+          "source": "https://www.canada.ca/en/immigration-refugees-citizenship/corporate/publications-manuals/operational-bulletins-manuals/permanent-residence/express-entry/applications-received-ircc-overview.html",
+          "steps": [
+            "On IMM 5002 / IMM 5669: list the relative's name, relationship (e.g. 'uncle'), date of birth, and status in Canada",
+            "If you are unsure of their exact status, write 'Canadian citizen' or 'Permanent Resident' and note uncertainty in a letter of explanation (LOE)",
+            "Attach a brief LOE clarifying the relationship if the connection is indirect"
+          ],
+          "caveats": [
+            "This guidance applies to Canadian immigration forms; it does not affect point calculations",
+            "Having or not having relatives in Canada does not affect CRS score (only applicable for Atlantic Immigration Program)"
+          ],
+          "effort": "low"
+        },
+        {
+          "description": "If you already submitted without listing a relative, submit a web form to IRCC requesting to update your application and attach a letter of explanation proactively.",
+          "status": "community",
+          "source": null,
+          "steps": [
+            "Draft a letter of explanation acknowledging the omission was unintentional",
+            "Submit via IRCC webform or through IRCC secure account document upload",
+            "Reference your application number prominently"
+          ],
+          "caveats": [
+            "Do this as soon as you realise the omission — do not wait for IRCC to flag it",
+            "Consult a Regulated Canadian Immigration Consultant (RCIC) if concerned about misrepresentation implications"
+          ],
+          "effort": "medium"
+        }
+      ],
+      "extracted_at": "2026-03-05T10:02:11.000000"
+    },
+    {
+      "pain_point_id": "pp-003",
+      "forum_slug": "express-entry",
+      "thread_id": "t-003",
+      "thread_title": "IRCC portal keeps logging me out when uploading documents — losing progress",
+      "thread_url": "https://www.canadavisa.com/canada-immigration-discussion-board/threads/portal-timeout-document-upload.54321/",
+      "title": "IRCC online portal session timeouts and upload failures during document submission",
+      "description": "The IRCC secure online portal frequently times out during document uploads, losing unsaved progress. Users report that after spending 30+ minutes filling out forms, a session timeout discards all data. Large file uploads (e.g., employment records, police certificates) frequently fail mid-upload with generic error messages. The portal has no auto-save functionality and its accepted file format list is inconsistently enforced.",
+      "category": "portal_technical",
+      "severity": "high",
+      "frequency_signal": "frequent",
+      "affected_user_types": ["all applicants using IRCC secure account"],
+      "affected_stages": ["document upload", "form completion", "biometric booking"],
+      "evidence_quotes": [
+        "I was 45 minutes into filling out my forms and got a session expired error. Had to start over from scratch.",
+        "The portal says PDF only but then rejects my PDF saying the file is invalid. I have no idea what format they want.",
+        "I tried uploading my employment letter 6 times. Each time it gets to 95% and then fails with 'upload error'."
+      ],
+      "tags": ["IRCC portal", "document upload", "session timeout", "technical bug", "PDF"],
+      "solutions": [
+        {
+          "description": "Prepare all documents and form answers in a separate text file or spreadsheet before opening the portal. Copy-paste answers to avoid losing work on timeout.",
+          "status": "community",
+          "source": null,
+          "steps": [
+            "Draft all form answers offline in a Google Doc or Word document",
+            "Compress each document to under 4 MB using tools like ilovepdf.com before uploading",
+            "Use Google Chrome browser — Safari and Firefox have higher failure rates on the IRCC portal",
+            "Keep session active by clicking 'Save and Continue' every 10 minutes"
+          ],
+          "caveats": [
+            "PDF files should be Version 1.4 or lower — very new PDFs sometimes fail",
+            "Maximum individual file size is 4 MB; combine smaller documents into one if possible"
+          ],
+          "effort": "low"
+        },
+        {
+          "description": "If the portal is completely unusable, report the specific error to IRCC via webform and request an alternate submission method (email or courier in exceptional cases).",
+          "status": "speculative",
+          "source": null,
+          "steps": [
+            "Screenshot the error message with date and time",
+            "Submit a webform describing the technical issue",
+            "Ask explicitly if IRCC can extend your document submission deadline due to technical failures"
+          ],
+          "caveats": [
+            "IRCC rarely grants extensions for technical issues unless extensively documented",
+            "Always attempt the upload multiple times at different times of day first"
+          ],
+          "effort": "medium"
+        }
+      ],
+      "extracted_at": "2026-03-05T10:03:45.000000"
+    }
+  ]
+}

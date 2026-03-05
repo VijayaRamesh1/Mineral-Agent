@@ -53,3 +53,9 @@ respx>=0.21  # mock httpx
 
 # --- Dev tooling ---
 python-dotenv>=1.0
+
+# --- Forum Scraper (forum_scraper module) ---
+beautifulsoup4>=4.12       # HTML parsing for canadavisa.com forum scraping
+lxml>=5.0                  # Fast HTML/XML parser backend for BeautifulSoup
+anthropic>=0.25            # Claude API for pain point extraction
+supabase>=2.3              # Supabase Python client for cloud DB upload
